@@ -46,8 +46,9 @@ async def stream_ohlcv(symbol="btcusdt", interval="3m"):
                     print(f"Saved candle to {csv_path}: {candle}")
 
             except Exception as e:
-                print("Error in WebSocket:", e)
-                break
+                print(f"Error in WebSocket: {e}")
+                await asyncio.sleep(5)  # Retry after 5 seconds
 
-# For standalone testing:
-asyncio.run(stream_ohlcv("btcusdt", "3m"))
+# Run the WebSocket (to be called by Render)
+if __name__ == "__main__":
+    asyncio.run(stream_ohlcv())
