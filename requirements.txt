@@ -1,0 +1,10 @@
+streamlit
+yfinance
+ccxt
+pandas
+pandas-ta
+plotly
+scikit-learn
+numpy
+websockets
+yfinance
