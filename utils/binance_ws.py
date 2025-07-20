@@ -1,4 +1,3 @@
-
 import asyncio
 import json
 import websockets
@@ -16,7 +15,7 @@ def get_csv_path(symbol: str, interval: str) -> str:
     os.makedirs(DATA_DIR, exist_ok=True)
     return os.path.join(DATA_DIR, f"{symbol.upper()}_{interval}.csv")
 
-async def stream_ohlcv(symbol="btcusdt", interval="1m"):
+async def stream_ohlcv(symbol="btcusdt", interval="3m"):
     stream_name = get_stream_name(symbol, interval)
     url = f"wss://stream.binance.com:9443/ws/{stream_name}"
     print(f"Connecting to {url}...")
@@ -51,4 +50,4 @@ async def stream_ohlcv(symbol="btcusdt", interval="1m"):
                 break
 
 # For standalone testing:
-# asyncio.run(stream_ohlcv("btcusdt", "1m"))
+asyncio.run(stream_ohlcv("btcusdt", "3m"))
