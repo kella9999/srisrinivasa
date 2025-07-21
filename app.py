@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 # ----- Page Setup -----
 st.set_page_config(page_title="Crypto Candlestick Predictor", layout="wide")
-st.title("📈 Crypto Candlestick Prediction Dashboard")
+st.title("\ud83d\udcc8 Crypto Candlestick Prediction Dashboard")
 
 # ----- State Management -----
 if 'last_update' not in st.session_state:
@@ -31,7 +31,7 @@ interval_map = {
     "5m": "5"
 }
 
-st.sidebar.header("🔧 Settings")
+st.sidebar.header("\ud83d\udd27 Settings")
 selected_coin_label = st.sidebar.selectbox("Select Coin", list(coin_options.keys()))
 selected_interval_label = st.sidebar.selectbox("Select Timeframe", list(interval_map.keys()))
 alert_threshold = st.sidebar.slider("Price Spike Alert (%)", 1.0, 10.0, 5.0)
@@ -41,12 +41,12 @@ selected_interval = interval_map[selected_interval_label]
 interval_seconds = {"1": 60, "3": 180, "5": 300}[selected_interval]
 
 # Tabs
-tab1, tab2 = st.tabs(["📊 Dashboard", "⚙️ Settings"])
+tab1, tab2 = st.tabs(["\ud83d\udcca Dashboard", "\u2699\ufe0f Settings"])
 
 # ---- Tab 1: Dashboard (Combined Chart, Live Data, Model Prediction) ----
 with tab1:
     # Chart Section
-    st.subheader(f"📊 Live Chart: {selected_coin_label} ({selected_interval_label})")
+    st.subheader(f"\ud83d\udcca Live Chart: {selected_coin_label} ({selected_interval_label})")
     tradingview_html = f"""
     <iframe src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_x&symbol=BINANCE:{selected_coin}&interval={selected_interval}&theme=dark&style=1&locale=en&utm_source=local"
     width="100%" height="500" frameborder="0" allowtransparency="true" scrolling="no"></iframe>
@@ -54,7 +54,7 @@ with tab1:
     components.html(tradingview_html, height=500)
 
     # Live Data Section
-    st.subheader(f"📡 Live Data Feed: {selected_coin_label} ({selected_interval_label})")
+    st.subheader(f"\ud83d\udcf1 Live Data Feed: {selected_coin_label} ({selected_interval_label})")
     csv_path = f"data/{selected_coin}_{selected_interval_label}.csv"
     if os.path.exists(csv_path):
         df = pd.read_csv(csv_path)
@@ -77,9 +77,11 @@ with tab1:
         st.warning(f"No data found for {selected_coin} at {selected_interval_label}. Ensure WebSocket is running.")
 
     # Model Prediction Section
-    st.subheader(f"🤖 Model Prediction: {selected_coin_label} ({selected_interval_label})")
-    model_path = f"models/{selected_coin}_{selected_interval_label}_xgb.pkl"
-    if os.path.exists(model_path) and os.path.exists(csv_path):
+    st.subheader(f"\ud83e\udd16 Model Prediction: {selected_coin_label} ({selected_interval_label})")
+    clf_path = f"models/xgb_{selected_coin}_{selected_interval_label}_classifier.pkl"
+    reg_path = f"models/xgb_{selected_coin}_{selected_interval_label}_regressor.pkl"
+
+    if os.path.exists(clf_path) and os.path.exists(reg_path) and os.path.exists(csv_path):
         df = pd.read_csv(csv_path)
         df['timestamp'] = pd.to_datetime(df['timestamp'])
         df = df.sort_values(by='timestamp', ascending=True)
@@ -92,27 +94,27 @@ with tab1:
         df['hammer'] = ta.cdl_hammer(df['open'], df['high'], df['low'], df['close'])
         df = df.dropna()
 
-        # Prepare latest candle for prediction
-        latest_candle = df.tail(1)[['rsi', 'ema', 'macd', 'doji', 'hammer', 'open', 'high', 'low', 'close', 'volume']]
+        latest = df.tail(1)[['rsi', 'ema', 'macd', 'doji', 'hammer', 'open', 'high', 'low', 'close', 'volume']]
 
-        # Load model
-        model = xgb.XGBClassifier()
-        model.load_model(model_path)
+        import joblib
+        clf = joblib.load(clf_path)
+        reg = joblib.load(reg_path)
 
-        # Predict
-        prediction = model.predict(latest_candle)[0]
-        pred_label = "📈 UP" if prediction == 1 else "📉 DOWN"
+        direction = clf.predict(latest)[0]
+        next_price = reg.predict(latest)[0]
+        pred_label = "\ud83d\udcc8 UP" if direction == 1 else "\ud83d\udd3d DOWN"
 
-        # Check for price spike alert
+        # Spike alert
         if not df.empty:
             last_close = df['close'].iloc[-1]
             prev_close = df['close'].iloc[-2] if len(df) > 1 else last_close
             price_change = ((last_close - prev_close) / prev_close) * 100
             if abs(price_change) > alert_threshold:
-                st.warning(f"🚨 Price Spike Alert: {price_change:.2f}% change detected!")
+                st.warning(f"\ud83d\udea8 Price Spike Alert: {price_change:.2f}% change detected!")
 
-        # Display prediction and table (as per your image)
-        st.metric(label="🔮 Predicted Next Candle", value=pred_label)
+        # Show output
+        st.metric(label="\ud83d\udd2e Predicted Next Candle", value=pred_label)
+        st.info(f"\ud83d\udcb0 Predicted Next Close Price: {round(next_price, 2)} USDT")
         st.table(pd.DataFrame({
             "coin": [selected_coin_label],
             "time interval": [selected_interval_label],
@@ -123,20 +125,18 @@ with tab1:
             "Manual refresh button": [st.button("Refresh")]
         }))
 
-        # Auto-refresh logic
         current_time = datetime.now()
         time_since_last = (current_time - st.session_state['last_update']).total_seconds()
         if time_since_last >= interval_seconds:
             st.session_state['last_update'] = current_time
             st.experimental_rerun()
-
-        st.metric(label="⏳ Remaining Seconds", value=f"{max(0, interval_seconds - time_since_last):.0f}")
+        st.metric(label="\u23f3 Remaining Seconds", value=f"{max(0, interval_seconds - time_since_last):.0f}")
     else:
-        st.error(f"Model or data not found. Ensure {model_path} and {csv_path} exist.")
+        st.error("Model or data not found. Ensure all required files exist.")
 
 # ---- Tab 2: Settings ----
 with tab2:
-    st.subheader("⚙️ Settings")
+    st.subheader("\u2699\ufe0f Settings")
     st.write("Configure your dashboard preferences here.")
     st.write(f"Current Coin: {selected_coin_label}, Timeframe: {selected_interval_label}")
     st.write(f"Price Spike Alert Threshold: {alert_threshold}%")
@@ -148,6 +148,3 @@ with tab2:
             st.warning("No data file to reset.")
     st.write("Order Book Analysis (Coming Soon)")
     st.write("On-Chain Metrics (Next Phase)")
-
-# ---- Placeholder for Order Book (Future) ----
-# To be implemented in the next phase
