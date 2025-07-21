@@ -1,3 +1,11 @@
-# Crypto Candlestick Predictor
+# Crypto Model Package
+Includes:
+- 90-day OHLCV data (.csv)
+- XGBoost classifier and regressor models (.pkl)
 
-A Streamlit app for predicting crypto candlestick movements using LSTM and XGBoost models.
+## Usage
+```python
+import joblib
+clf = joblib.load('models/xgb_BTC_1m_classifier.pkl')
+reg = joblib.load('models/xgb_BTC_1m_regressor.pkl')
+```
