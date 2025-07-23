@@ -1,14 +1,21 @@
 name: Model Auto-Update
 on:
   schedule:
-    - cron: '0 */4 * * *'  # Runs every 4 hours
-  workflow_dispatch:  # Allows manual triggers
+    - cron: '0 */4 * * *'  # Every 4 hours
+  workflow_dispatch:  # Manual trigger
+
+permissions:
+  contents: write  # Required for pushing changes
 
 jobs:
   update-model:
     runs-on: ubuntu-latest
+    timeout-minutes: 15  # Prevents hanging
+
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for git diff
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -17,17 +24,17 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install onnxruntime yfinance pandas ta
+          pip install onnxruntime==1.15.1 yfinance==0.2.31 pandas==2.0.3 scikit-learn==1.2.2
 
-      - name: Download latest data
+      - name: Download data
         run: |
           python -c "
           import yfinance as yf
-          df = yf.download('BTC-USD', period='60d', interval='3m')
-          df.to_csv('data/BTCUSDT_3m.csv')
+          df = yf.download('BTC-USD', period='14d', interval='3m')
+          df[['Close', 'Volume']].to_csv('data/BTCUSDT_3m.csv')
           "
 
-      - name: Update model
+      - name: Train model
         run: |
           python -c "
           import pandas as pd
@@ -38,15 +45,26 @@ jobs:
           X = df[['Close', 'Volume']].values[:-1]
           y = df['Close'].shift(-1).dropna().values
           
-          model = GradientBoostingRegressor(n_estimators=100)
+          model = GradientBoostingRegressor(n_estimators=50, max_depth=3)
           model.fit(X, y)
-          joblib.dump(model, 'models/BTCUSDT_3m.joblib')
+          joblib.dump(model, 'models/BTCUSDT_3m.joblib', compress=3)
           "
 
       - name: Commit changes
+        if: success()
         run: |
-          git config --global user.name 'GitHub Actions'
-          git config --global user.email 'actions@github.com'
+          git config --global user.name 'GitHub Actions Bot'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          
+          # Only commit if data changed
           git add data/BTCUSDT_3m.csv models/BTCUSDT_3m.joblib
-          git commit -m "[Automated] Update model and data"
-          git push
+          git diff-index --quiet HEAD || {
+            git commit -m "[Auto-Update] Model & Data $(date +'%Y-%m-%d %H:%M UTC')"
+            git push origin HEAD:${{ github.ref }}
+          }
+
+      - name: Verify push
+        if: success()
+        run: |
+          echo "✅ Updates committed successfully!"
+          echo "Last change: $(git log -1 --pretty=%B)"
