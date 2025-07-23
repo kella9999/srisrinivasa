@@ -1,10 +1,15 @@
 import joblib
-import urllib.request
 import os
 
-MODEL_URL = "https://gist.githubusercontent.com/ai-temp-models/9cf5.../raw/predictor.joblib"
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "predictor.joblib")
 
 def load_model():
-    if not os.path.exists("models/predictor.joblib"):
-        urllib.request.urlretrieve(MODEL_URL, "models/predictor.joblib")
-    return joblib.load("models/predictor.joblib")
+    """Loads the model with verification"""
+    if not os.path.exists(MODEL_PATH):
+        raise FileNotFoundError(f"Model file missing at {MODEL_PATH}")
+    return joblib.load(MODEL_PATH)
+
+# Test load
+if __name__ == "__main__":
+    model = load_model()
+    print("✅ Model loaded successfully!")
