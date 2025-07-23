@@ -1,23 +1,52 @@
-name: Auto-Update Files
+name: Model Auto-Update
 on:
-  workflow_dispatch:  # Manual trigger
   schedule:
-    - cron: '0 12 * * *'  # Runs daily at 12 PM UTC (optional)
-  push:
-    branches: [ main ]
+    - cron: '0 */4 * * *'  # Runs every 4 hours
+  workflow_dispatch:  # Allows manual triggers
 
 jobs:
-  update:
+  update-model:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Generate changes
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
         run: |
-          echo "New content added on $(date)" >> auto-file.txt
+          pip install onnxruntime yfinance pandas ta
+
+      - name: Download latest data
+        run: |
+          python -c "
+          import yfinance as yf
+          df = yf.download('BTC-USD', period='60d', interval='3m')
+          df.to_csv('data/BTCUSDT_3m.csv')
+          "
+
+      - name: Update model
+        run: |
+          python -c "
+          import pandas as pd
+          from sklearn.ensemble import GradientBoostingRegressor
+          import joblib
+          
+          df = pd.read_csv('data/BTCUSDT_3m.csv')
+          X = df[['Close', 'Volume']].values[:-1]
+          y = df['Close'].shift(-1).dropna().values
+          
+          model = GradientBoostingRegressor(n_estimators=100)
+          model.fit(X, y)
+          joblib.dump(model, 'models/BTCUSDT_3m.joblib')
+          "
+
       - name: Commit changes
         run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "actions@github.com"
-          git add .
-          git commit -m "Auto-update: Applied changes"
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          git add data/BTCUSDT_3m.csv models/BTCUSDT_3m.joblib
+          git commit -m "[Automated] Update model and data"
           git push
