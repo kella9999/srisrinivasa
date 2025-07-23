@@ -1,17 +1,19 @@
-import joblib
-import yfinance as yf
+from flask import Flask, jsonify
+from data.data_fetcher import fetch_candle_data
+from utils.predictor import CryptoPredictor
 
-def predict(coin="BTC-USD"):
-    # 1. Load your uploaded model
-    model = joblib.load('BTCUSDT_3m.joblib')
-    
-    # 2. Get live data
-    data = yf.download(coin, period='1d', interval='3m')
-    
-    # 3. Make prediction
-    last_close = data['Close'].iloc[-1]
-    return {
-        "price": float(last_close),
-        "prediction": float(last_close * 1.01),  # 1% increase
-        "confidence": 85
-    }
+app = Flask(__name__)
+predictor = CryptoPredictor()
+
+@app.route("/predict")
+def predict():
+    data = fetch_candle_data()
+    last_close = data["Close"].iloc[-1]
+    return jsonify({
+        "last_price": last_close,
+        "prediction": predictor.predict(last_close),
+        "confidence": 85  # Temporary mock value
+    })
+
+if __name__ == "__main__":
+    app.run()
