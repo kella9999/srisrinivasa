@@ -2,5 +2,9 @@ services:
   - type: web
     name: srisrinivasa
     plan: free
-    buildCommand: pip install -r requirements.txt
+    env: python  # <-- This replaces 'runtime'
+    buildCommand: |
+      pip install -r requirements.txt
+      python -c "from models.load_model import load_model; load_model()"  # Optional model pre-load
     startCommand: gunicorn app:app
+    healthCheckPath: /healthcheck  # Recommended
