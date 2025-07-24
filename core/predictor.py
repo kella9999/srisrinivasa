@@ -1,7 +1,7 @@
 import onnxruntime as ort
 import numpy as np
 import pandas as pd
-from utils.feature_engineer import add_technical_indicators
+from feature_engineer import add_technical_indicators
 import pickle
 from functools import lru_cache
 
