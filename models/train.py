@@ -13,6 +13,8 @@ from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
 import onnx
 from onnxruntime.quantization import quantize_dynamic, QuantType
+from utils.feature_engineer import add_technical_indicators
+
 
 # Config
 DATA_URL = "https://storage.googleapis.com/ai-dev-public-datasets/BTC_3m_2020-2023.csv"
@@ -108,6 +110,13 @@ def train_xgboost(X, y):
     return model, scaler
 
 def export_onnx(model, scaler):
+     # Add quantization
+    quantize_dynamic(
+        "models/btc_3m.onnx",
+        "models/btc_3m_quant.onnx",
+        weight_type=QuantType.QInt8
+    )
+    print("Model quantized successfully")
     # Convert to ONNX
     initial_type = [('float_input', FloatTensorType([None, scaler.mean_.shape[0]]))]
     onnx_model = convert_sklearn(model, initial_types=initial_type)
