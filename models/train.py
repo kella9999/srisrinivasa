@@ -82,6 +82,21 @@ def train_model(X, y):
     split_idx = int(len(X_scaled) * 0.8)
     X_train, X_test = X_scaled[:split_idx], X_scaled[split_idx:]
     y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
+    
+def export_model_and_scaler(model, scaler, model_path="models/btc_3m.onnx", scaler_path="models/btc_3m_scaler.pkl"):
+    from skl2onnx import convert_sklearn
+    from skl2onnx.common.data_types import FloatTensorType
+    import pickle
+
+    initial_type = [('float_input', FloatTensorType([None, scaler.mean_.shape[0]]))]
+    onnx_model = convert_sklearn(model, initial_types=initial_type)
+    with open(model_path, "wb") as f:
+        f.write(onnx_model.SerializeToString())
+    print(f"Model saved as {model_path}")
+
+    with open(scaler_path, "wb") as f:
+        pickle.dump(scaler, f)
+    print(f"Scaler saved as {scaler_path}")
 
     print(f"Training samples: {len(X_train)}; Testing samples: {len(X_test)}")
 
