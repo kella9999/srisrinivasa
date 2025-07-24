@@ -1,3 +1,0 @@
-# Ignore large model files (we'll create them dynamically)
-*.h5
-*.onnx
