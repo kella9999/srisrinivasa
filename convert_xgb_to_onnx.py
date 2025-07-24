@@ -1,24 +1,22 @@
 import joblib
 import onnxmltools
 from onnxmltools.convert.common.data_types import FloatTensorType
-import os
 
-# === SETTINGS ===
-model_path = "models/btc_3m_xgb.pkl"
-onnx_output_path = "models/btc_3m.onnx"
-input_dim = 30  # <== CHANGE THIS TO MATCH your model's feature size
+# Load your trained model
+model = joblib.load("models/btc_3m_xgb.pkl")
 
-# === LOAD MODEL ===
-print("📦 Loading model...")
-model = joblib.load(model_path)
-print("✅ Model loaded:", type(model))
+# Set input dimension (features used during training)
+input_dim = 30  # ✅ UPDATE THIS if your model used more/less features
 
-# === CONVERT TO ONNX ===
-print("🔄 Converting to ONNX...")
+# Define input type for ONNX
 initial_type = [("input", FloatTensorType([None, input_dim]))]
-onnx_model = onnxmltools.convert_xgboost(model, initial_types=initial_type)
 
-# === SAVE ONNX MODEL ===
-with open(onnx_output_path, "wb") as f:
-    f.write(onnx_model.SerializeToString())
-print(f"✅ ONNX model saved: {onnx_output_path}")
+# Try converting to ONNX
+try:
+    onnx_model = onnxmltools.convert_xgboost(model, initial_types=initial_type)
+    with open("models/btc_3m.onnx", "wb") as f:
+        f.write(onnx_model.SerializeToString())
+    print("✅ Successfully converted to ONNX and saved.")
+except Exception as e:
+    print("❌ Failed to convert:")
+    print(e)
