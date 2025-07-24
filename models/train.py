@@ -84,26 +84,23 @@ def download_dataset():
             logging.info(f"Generated {len(df)} synthetic data points")
 
 def add_technical_indicators(df):
-    """Calculate advanced technical indicators"""
+    """Calculate all technical indicators directly in the script"""
     df = df.copy()
-    typical_price = (df['High'] + df['Low'] + df['Close']) / 3
     
-    # Trend indicators
-    df['ema_20'] = ta.trend.ema_indicator(df['Close'], window=20)
+    # Price Features
+    df['returns'] = df['Close'].pct_change()
+    
+    # Momentum
+    df['rsi'] = ta.momentum.rsi(df['Close'], window=14)
     df['macd'] = ta.trend.macd_diff(df['Close'])
     
-    # Momentum indicators
-    df['rsi'] = ta.momentum.rsi(df['Close'], window=14)
-    df['stoch_%k'] = ta.momentum.stoch(df['High'], df['Low'], df['Close'], window=14)
+    # Volatility
+    bb = ta.volatility.BollingerBands(df['Close'], window=5, window_dev=2)
+    df['bollinger_%'] = (df['Close'] - bb.bollinger_lband()) / \
+                       (bb.bollinger_hband() - bb.bollinger_lband())
     
-    # Volatility indicators
-    bb = ta.volatility.BollingerBands(df['Close'], window=20, window_dev=2)
-    df['bb_%b'] = (df['Close'] - bb.bollinger_lband()) / (bb.bollinger_hband() - bb.bollinger_lband())
-    df['atr'] = ta.volatility.average_true_range(df['High'], df['Low'], df['Close'], window=14)
-    
-    # Volume indicators
-    df['obv'] = ta.volume.on_balance_volume(df['Close'], df['Volume'])
-    df['volume_ma'] = df['Volume'].rolling(20).mean()
+    # Volume
+    df['volume_ma'] = df['Volume'].rolling(window=5).mean()
     
     return df.dropna()
 
