@@ -1,3 +1,8 @@
+import skl2onnx
+from skl2onnx import convert_sklearn
+from skl2onnx.common.data_types import FloatTensorType
+import onnx
+import pickle
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
@@ -12,6 +17,21 @@ import ta
 
 CSV_FILE = "BTC_3m_2020-2023.csv"
 DATA_URL = "https://storage.googleapis.com/ai-dev-public-datasets/BTC_3m_2020-2023.csv"
+
+def export_model_and_scaler(model, scaler, model_path="models/btc_3m.onnx", scaler_path="models/btc_3m_scaler.pkl"):
+    # Define input type for ONNX converter (number of features)
+    initial_type = [('float_input', FloatTensorType([None, scaler.mean_.shape[0]]))]
+
+    # Convert to ONNX
+    onnx_model = convert_sklearn(model, initial_types=initial_type)
+    with open(model_path, "wb") as f:
+        f.write(onnx_model.SerializeToString())
+    print(f"Model exported to {model_path}")
+
+    # Save scaler with pickle
+    with open(scaler_path, "wb") as f:
+        pickle.dump(scaler, f)
+    print(f"Scaler saved to {scaler_path}")
 
 def download_csv_if_needed(filename=CSV_FILE, url=DATA_URL):
     if not os.path.exists(filename):
