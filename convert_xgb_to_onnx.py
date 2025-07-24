@@ -19,3 +19,4 @@ with open("models/btc_3m.onnx", "wb") as f:
     f.write(onnx_model.SerializeToString())
 
 print("✅ Successfully converted XGBoost model to ONNX!")
+
