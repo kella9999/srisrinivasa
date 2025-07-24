@@ -1,137 +1,140 @@
-import skl2onnx
-from skl2onnx import convert_sklearn
-from skl2onnx.common.data_types import FloatTensorType
-import onnx
+import os
 import pickle
 import pandas as pd
+import numpy as np
+import yfinance as yf
+import ta
+import requests
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
 from xgboost import XGBClassifier
-import numpy as np
-import requests
-import os
-import yfinance as yf
-import ta
+from skl2onnx import convert_sklearn
+from skl2onnx.common.data_types import FloatTensorType
+import onnx
+from onnxruntime.quantization import quantize_dynamic, QuantType
 
-
-CSV_FILE = "BTC_3m_2020-2023.csv"
+# Config
 DATA_URL = "https://storage.googleapis.com/ai-dev-public-datasets/BTC_3m_2020-2023.csv"
+CSV_FILE = "BTC_3m_2020-2023.csv"
+MODEL_DIR = "models"
+os.makedirs(MODEL_DIR, exist_ok=True)
 
-def export_model_and_scaler(model, scaler, model_path="models/btc_3m.onnx", scaler_path="models/btc_3m_scaler.pkl"):
-    # Define input type for ONNX converter (number of features)
-    initial_type = [('float_input', FloatTensorType([None, scaler.mean_.shape[0]]))]
-
-    # Convert to ONNX
-    onnx_model = convert_sklearn(model, initial_types=initial_type)
-    with open(model_path, "wb") as f:
-        f.write(onnx_model.SerializeToString())
-    print(f"Model exported to {model_path}")
-
-    # Save scaler with pickle
-    with open(scaler_path, "wb") as f:
-        pickle.dump(scaler, f)
-    print(f"Scaler saved to {scaler_path}")
-
-def download_csv_if_needed(filename=CSV_FILE, url=DATA_URL):
-    if not os.path.exists(filename):
-        print(f"Downloading {filename} ...")
-        response = requests.get(url)
-        if response.status_code == 200:
-            with open(filename, "wb") as file:
-                file.write(response.content)
-            print("CSV file downloaded successfully!")
-        else:
-            raise Exception(f"Failed to download CSV file. Status code: {response.status_code}")
-    else:
-        print(f"{filename} already exists, skipping download.")
-
-def load_csv(filename=CSV_FILE):
-    print(f"Loading {filename} ...")
-    df = pd.read_csv(filename)
-    print(f"Loaded {len(df)} rows.")
-    return df
-
-def get_live_data(ticker="BTC-USD", interval="3m", period="60d"):
-    print(f"Fetching live {interval} {ticker} data for last {period} ...")
-    df = yf.download(ticker, interval=interval, period=period)
-    print(f"Fetched {len(df)} rows.")
-    return df
+def download_dataset():
+    if not os.path.exists(CSV_FILE):
+        print("Downloading dataset...")
+        r = requests.get(DATA_URL)
+        with open(CSV_FILE, 'wb') as f:
+            f.write(r.content)
 
 def add_technical_indicators(df):
     df = df.copy()
+    # Price Features
+    df['returns'] = df['Close'].pct_change()
+    
+    # Momentum
     df['rsi'] = ta.momentum.rsi(df['Close'], window=14)
-    df['macd'] = ta.trend.macd(df['Close'])
-    bb_indicator = ta.volatility.BollingerBands(close=df['Close'], window=5, window_dev=2)
-    df['bollinger_%'] = (df['Close'] - bb_indicator.bollinger_lband()) / (bb_indicator.bollinger_hband() - bb_indicator.bollinger_lband())
-    df = df.dropna()
-    return df
+    df['stoch_%k'] = ta.momentum.stoch(df['High'], df['Low'], df['Close'], window=14)
+    df['macd'] = ta.trend.macd_diff(df['Close'])
+    
+    # Volatility
+    bb = ta.volatility.BollingerBands(df['Close'], window=5, window_dev=2)
+    df['bollinger_%'] = (df['Close'] - bb.bollinger_lband()) / (bb.bollinger_hband() - bb.bollinger_lband())
+    
+    # Volume
+    df['volume_ma'] = df['Volume'].rolling(window=5).mean()
+    
+    return df.dropna()
 
-def prepare_features_and_target(df):
+def prepare_data(df):
     df = add_technical_indicators(df)
-    features = df[['Close', 'Volume', 'rsi', 'macd', 'bollinger_%']]
-    target = (df['Close'].shift(-1) > df['Close']).astype(int)
-    valid_idx = target.dropna().index
-    return features.loc[valid_idx], target.loc[valid_idx]
+    
+    # Target: Next candle direction (1=up, 0=down)
+    df['target'] = (df['Close'].shift(-1) > df['Close']).astype(int)
+    
+    # Selected features (matches predictor.py)
+    features = [
+        'Close', 'Volume', 
+        'rsi', 'macd', 'bollinger_%',
+        'returns', 'volume_ma'
+    ]
+    
+    X = df[features]
+    y = df['target'].dropna()
+    X = X.loc[y.index]
+    
+    return X, y
 
-def train_model(X, y):
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-
-    # Keep 80% for training, 20% for testing
-    split_idx = int(len(X_scaled) * 0.8)
-    X_train, X_test = X_scaled[:split_idx], X_scaled[split_idx:]
+def train_xgboost(X, y):
+    # Time-based split (no shuffling)
+    split_idx = int(len(X) * 0.8)
+    X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
     y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
     
-def export_model_and_scaler(model, scaler, model_path="models/btc_3m.onnx", scaler_path="models/btc_3m_scaler.pkl"):
-    from skl2onnx import convert_sklearn
-    from skl2onnx.common.data_types import FloatTensorType
-    import pickle
-
-    initial_type = [('float_input', FloatTensorType([None, scaler.mean_.shape[0]]))]
-    onnx_model = convert_sklearn(model, initial_types=initial_type)
-    with open(model_path, "wb") as f:
-        f.write(onnx_model.SerializeToString())
-    print(f"Model saved as {model_path}")
-
-    with open(scaler_path, "wb") as f:
-        pickle.dump(scaler, f)
-    print(f"Scaler saved as {scaler_path}")
-
-    print(f"Training samples: {len(X_train)}; Testing samples: {len(X_test)}")
-
+    # Scaling
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    
+    # Optimized model (from live deployment)
     model = XGBClassifier(
-        n_estimators=150,
-        max_depth=6,
-        learning_rate=0.05,
-        subsample=0.8,
-        colsample_bytree=0.8,
+        n_estimators=200,
+        max_depth=7,
+        learning_rate=0.03,
+        subsample=0.75,
+        colsample_bytree=0.75,
+        gamma=0.2,
+        reg_alpha=0.1,
+        reg_lambda=0.1,
         objective='binary:logistic',
-        use_label_encoder=False,
-        eval_metric='logloss'
+        eval_metric='logloss',
+        tree_method='hist',
+        early_stopping_rounds=25,
+        random_state=42
     )
-
+    
     model.fit(
-        X_train, y_train,
-        eval_set=[(X_test, y_test)],
-        early_stopping_rounds=20,
+        X_train_scaled, y_train,
+        eval_set=[(X_test_scaled, y_test)],
         verbose=True
     )
-
-    y_pred = model.predict(X_test)
-    print("Accuracy:", accuracy_score(y_test, y_pred))
-    print("Classification report:\n", classification_report(y_test, y_pred))
+    
+    # Evaluation
+    y_pred = model.predict(X_test_scaled)
+    print("\nModel Performance:")
+    print(f"Accuracy: {accuracy_score(y_test, y_pred):.2%}")
+    print(classification_report(y_test, y_pred))
+    
     return model, scaler
 
+def export_onnx(model, scaler):
+    # Convert to ONNX
+    initial_type = [('float_input', FloatTensorType([None, scaler.mean_.shape[0]]))]
+    onnx_model = convert_sklearn(model, initial_types=initial_type)
+    
+    # Save unquantized
+    onnx_path = os.path.join(MODEL_DIR, "btc_3m_unquantized.onnx")
+    with open(onnx_path, "wb") as f:
+        f.write(onnx_model.SerializeToString())
+    
+    # Quantize (for production)
+    quant_path = os.path.join(MODEL_DIR, "btc_3m.onnx")
+    quantize_dynamic(
+        onnx_path,
+        quant_path,
+        weight_type=QuantType.QInt8
+    )
+    
+    # Save scaler
+    scaler_path = os.path.join(MODEL_DIR, "btc_3m_scaler.pkl")
+    with open(scaler_path, "wb") as f:
+        pickle.dump(scaler, f)
+    
+    print(f"\nModel exported to {quant_path} (Size: {os.path.getsize(quant_path)/1024:.1f}KB)")
+
 if __name__ == "__main__":
-    # Existing code: download, load, fetch live data, train
-    download_csv_if_needed()
-    df_csv = load_csv()
-
-    df_live = get_live_data()
-
-    X, y = prepare_features_and_target(df_csv)
-    model, scaler = train_model(X, y)
-
-    # Export model & scaler for inference use
-    export_model_and_scaler(model, scaler)
+    download_dataset()
+    df = pd.read_csv(CSV_FILE)
+    X, y = prepare_data(df)
+    model, scaler = train_xgboost(X, y)
+    export_onnx(model, scaler)
