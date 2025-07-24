@@ -109,13 +109,14 @@ def train_model(X, y):
     return model, scaler
 
 if __name__ == "__main__":
-    # 1. Download & load CSV
+    # Existing code: download, load, fetch live data, train
     download_csv_if_needed()
     df_csv = load_csv()
 
-    # 2. Fetch live data (optional, here just demo to check preprocessing)
     df_live = get_live_data()
 
-    # 3. Train on CSV data first
     X, y = prepare_features_and_target(df_csv)
     model, scaler = train_model(X, y)
+
+    # Export model & scaler for inference use
+    export_model_and_scaler(model, scaler)
