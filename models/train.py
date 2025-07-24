@@ -84,23 +84,27 @@ def download_dataset():
             logging.info(f"Generated {len(df)} synthetic data points")
 
 def add_technical_indicators(df):
-    """Calculate all technical indicators directly in the script"""
+    """Calculate advanced technical indicators"""
     df = df.copy()
     
     # Price Features
     df['returns'] = df['Close'].pct_change()
     
-    # Momentum
-    df['rsi'] = ta.momentum.rsi(df['Close'], window=14)
+    # Trend indicators
+    df['ema_20'] = ta.trend.ema_indicator(df['Close'], window=20)
     df['macd'] = ta.trend.macd_diff(df['Close'])
     
-    # Volatility
-    bb = ta.volatility.BollingerBands(df['Close'], window=5, window_dev=2)
-    df['bollinger_%'] = (df['Close'] - bb.bollinger_lband()) / \
-                       (bb.bollinger_hband() - bb.bollinger_lband())
+    # Momentum indicators
+    df['rsi'] = ta.momentum.rsi(df['Close'], window=14)
     
-    # Volume
-    df['volume_ma'] = df['Volume'].rolling(window=5).mean()
+    # Volatility indicators
+    bb = ta.volatility.BollingerBands(df['Close'], window=20, window_dev=2)
+    df['bb_%b'] = (df['Close'] - bb.bollinger_lband()) / (bb.bollinger_hband() - bb.bollinger_lband())
+    df['atr'] = ta.volatility.average_true_range(df['High'], df['Low'], df['Close'], window=14)
+    
+    # Volume indicators
+    df['obv'] = ta.volume.on_balance_volume(df['Close'], df['Volume'])
+    df['volume_ma'] = df['Volume'].rolling(20).mean()
     
     return df.dropna()
 
@@ -112,17 +116,21 @@ def prepare_data():
     # Target: Price movement in next period (1=up, 0=down)
     df['target'] = (df['Close'].shift(-1) > df['Close']).astype(int)
     
-    # Selected features
+    # Selected features - using only available indicators
     features = [
         'Close', 'Volume',
         'ema_20', 'macd', 'rsi',
-        'bb_%b', 'atr', 'obv'
+        'bb_%b', 'atr', 'obv',
+        'volume_ma', 'returns'
     ]
     
-    X = df[features]
+    # Ensure all features exist
+    available_features = [f for f in features if f in df.columns]
+    X = df[available_features]
     y = df['target'].dropna()
     X = X.loc[y.index]  # Align features with targets
     
+    logging.info(f"Using features: {available_features}")
     return X, y
 
 def train_model(X, y):
