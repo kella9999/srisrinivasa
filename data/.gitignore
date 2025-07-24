@@ -1,3 +1,0 @@
-# Ignore cached data - we'll fetch fresh always
-*.csv
-*.pkl
