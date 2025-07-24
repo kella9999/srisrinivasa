@@ -1,66 +1,51 @@
 from flask import Flask, request, jsonify
-import pandas as pd
-import pickle
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from predictor import CryptoPredictor
-import logging
+import os
 
-# Configuration
-MODEL_PATH = "models/btc_3m.onnx"
-SCALER_PATH = "models/btc_3m_scaler.pkl"
-
-# Initialize Flask
 app = Flask(__name__)
-logging.basicConfig(level=logging.INFO)
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["10 per minute"]
+)
 
-# Load model globally
-try:
-    predictor = CryptoPredictor(MODEL_PATH, SCALER_PATH)
-    logging.info("Model loaded successfully")
-except Exception as e:
-    logging.error(f"Model loading failed: {str(e)}")
-    raise
+# Initialize predictor
+predictor = CryptoPredictor(
+    model_path="models/btc_3m_quant.onnx",
+    scaler_path="models/btc_3m_scaler.pkl"
+)
 
-@app.route('/health', methods=['GET'])
-def health_check():
-    return jsonify({"status": "healthy", "model": "BTC_3m"})
+@app.route('/health')
+def health():
+    return jsonify({
+        "status": "healthy",
+        "model_loaded": os.path.exists("models/btc_3m_quant.onnx")
+    })
 
 @app.route('/predict', methods=['POST'])
+@limiter.limit("5 per second")
 def predict():
     try:
-        # Parse input
         data = request.get_json()
+        if not data or 'Close' not in data:
+            return jsonify({"error": "Missing 'Close' price"}), 400
         
-        # Basic validation
-        if not data or 'Close' not in data or 'Volume' not in data:
-            return jsonify({
-                "error": "Invalid input",
-                "required": ["Close", "Volume"],
-                "received": list(data.keys()) if data else None
-            }), 400
+        close = float(data['Close'])
+        volume = float(data.get('Volume', 0))  # Default volume
         
-        # Convert to DataFrame
-        input_df = pd.DataFrame([data])
-        
-        # Get prediction
-        proba = predictor.predict(input_df)
-        signal = 1 if proba >= 0.6 else 0  # Confidence threshold
+        proba = predictor.predict(close, volume)
+        signal = 1 if proba >= 0.6 else 0
         
         return jsonify({
             "signal": signal,
-            "probability": float(proba),
-            "confidence": "high" if abs(proba - 0.5) > 0.2 else "low",
-            "features_used": predictor.required_features
+            "confidence": float(proba),
+            "features_used": ["Close", "Volume", "rsi", "macd", "bollinger_%"]
         })
-        
+    
     except Exception as e:
-        logging.error(f"Prediction error: {str(e)}")
-        return jsonify({
-            "error": str(e),
-            "example_request": {
-                "Close": 42000.0,
-                "Volume": 1500.0
-            }
-        }), 500
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
