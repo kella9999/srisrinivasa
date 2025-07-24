@@ -1,22 +1,25 @@
-import xgboost as xgb
+import os
 import joblib
-import numpy as np
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
 
-# --- Load your trained XGBoost model (.pkl) ---
-model = joblib.load("models/btc_3m_xgb.pkl")
+pkl_path = "models/btc_3m_xgb.pkl"
+onnx_path = "models/btc_3m.onnx"
+input_dim = 30  # ← adjust if your model uses a different number of features
 
-# --- Define input shape: Adjust if needed (e.g., 30 features) ---
-input_dim = 30
+# 1) Check that the .pkl exists
+if not os.path.exists(pkl_path):
+    print(f"❌ ERROR: {pkl_path} not found.")
+    exit(1)
+print(f"📦 Loading XGBoost model from {pkl_path} ...")
+model = joblib.load(pkl_path)
+
+# 2) Convert to ONNX
+print("🔄 Converting to ONNX format …")
 initial_type = [("input", FloatTensorType([None, input_dim]))]
-
-# --- Convert to ONNX ---
 onnx_model = convert_sklearn(model, initial_types=initial_type)
 
-# --- Save ONNX model ---
-with open("models/btc_3m.onnx", "wb") as f:
+# 3) Save the ONNX file
+with open(onnx_path, "wb") as f:
     f.write(onnx_model.SerializeToString())
-
-print("✅ Successfully converted XGBoost model to ONNX!")
-
+print(f"✅ Successfully exported ONNX model to {onnx_path}")
