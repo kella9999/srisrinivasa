@@ -12,9 +12,8 @@ try:
         scaler_path="models/btc_3m_scaler.pkl"
     )
 except Exception as e:
-    print(f"Failed to initialize predictor: {e}")
-    # If the model can't load, we should not start the app.
-    # Or handle it gracefully, but for now, exiting is safer.
+    print(f"FATAL: Could not load the model or scaler. Error: {e}")
+    # Exit if the core components can't be loaded.
     exit()
 
 
@@ -43,5 +42,5 @@ def predict():
 
 if __name__ == '__main__':
     # The port should be configured based on environment variables for deployment
-   port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
