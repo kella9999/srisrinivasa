@@ -1,21 +1,21 @@
-﻿# utils/feature_engineer.py
-
 import pandas as pd
 import ta
 import numpy as np
 
 def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Generate a standardized set of 30+ technical features for the prediction model.
-    Handles initial data warming period and ensures robust calculations.
+    Generates 30+ technical features with robust error handling
+    Returns empty DataFrame if insufficient data
     """
     if len(df) < 20:
-        return pd.DataFrame() # Not enough data to generate features
+        return pd.DataFrame()
 
-    # Ensure data is numeric to prevent calculation errors
+    # Convert all columns to numeric
     df = df.apply(pd.to_numeric, errors='coerce')
-
-    # --- Feature Generation ---
+    
+    # Handle NaN/infinite values
+    if df.isnull().values.any() or np.isinf(df.values).any():
+        df = df.replace([np.inf, -np.inf], np.nan).fillna(0)
 
     # 1. Core Price & Trend Features
     df['returns'] = df['Close'].pct_change()
@@ -31,13 +31,12 @@ def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     # 3. Volatility Features
     bb = ta.volatility.BollingerBands(df['Close'], window=20, window_dev=2)
-    bb_h = bb.bollinger_hband()
-    bb_l = bb.bollinger_lband()
-    # Robust calculation for bb_%b to avoid division by zero
-    df['bb_%b'] = (df['Close'] - bb_l) / (bb_h - bb_l)
-    df['bb_%b'].replace([np.inf, -np.inf], 0, inplace=True) # Replace infinities with 0
+    df['bb_%b'] = (df['Close'] - bb.bollinger_lband()) / (
+        bb.bollinger_hband() - bb.bollinger_lband())
+    df['bb_%b'].replace([np.inf, -np.inf], 0, inplace=True)
 
-    df['atr'] = ta.volatility.average_true_range(df['High'], df['Low'], df['Close'], window=14)
+    df['atr'] = ta.volatility.average_true_range(
+        df['High'], df['Low'], df['Close'], window=14)
     df['range'] = df['High'] - df['Low']
     df['volatility'] = df['Close'].rolling(5).std()
     df['range_ratio'] = df['range'] / df['atr']
@@ -54,17 +53,12 @@ def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df['ma_ratio'] = df['ema_20'] / df['price_ma']
     df['ma_ratio'].replace([np.inf, -np.inf], 0, inplace=True)
 
-    # 6. Lag Features (for historical context)
-    # These provide the model with a memory of past prices
-    lag_periods = [1, 2, 3, 5, 8, 13, 21, 34, 55] # Using 9 lags
+    # 6. Lag Features
+    lag_periods = [1, 2, 3, 5, 8, 13, 21, 34, 55]
     for i in lag_periods:
         df[f'close_lag_{i}'] = df['Close'].shift(i)
 
-
-    # --- Final Feature Selection ---
-
-    # Define the exact feature order expected by the model.
-    # This list MUST match what the model is trained on.
+    # Final feature selection and validation
     feature_cols = [
         'Close', 'Volume', 'returns', 'ema_20', 'macd', 'macd_signal', 'price_ma',
         'rsi', 'momentum_5', 'rsi_ema', 'bb_%b', 'atr', 'range', 'volatility',
@@ -74,6 +68,9 @@ def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
         'close_lag_13', 'close_lag_21', 'close_lag_34', 'close_lag_55'
     ]
 
-    # Return a dataframe with NaNs dropped.
-    # This ensures that only complete rows (with all features calculated) are returned.
+    # Ensure all features exist
+    for col in feature_cols:
+        if col not in df.columns:
+            df[col] = 0.0
+
     return df[feature_cols].dropna()
