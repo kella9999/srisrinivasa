@@ -1,0 +1,19 @@
+﻿# requirements.txt
+
+# Core Data Handling
+pandas>=2.0.3
+numpy>=1.24.0
+yfinance>=0.2.31
+ta>=0.10.2
+
+# Machine Learning
+scikit-learn>=1.2.2
+xgboost>=1.7.5
+
+# API Server
+Flask>=2.3.2
+gunicorn>=20.1.0
+
+# Utilities
+python-dateutil>=2.8.0
+requests>=2.31.0
